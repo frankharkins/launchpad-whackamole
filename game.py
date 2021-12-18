@@ -21,6 +21,7 @@ class Launchpad():
         self.IS_WORKING = False
         self.FAILED = False
         self.FAILED_COORDS = None
+        self.LIVES = 2
         self.SCORE = 0
         self.squares = []
         for x in range(8):
@@ -52,12 +53,22 @@ class Square():
         self.launchpad.out.send(msg)
 
     def press(self, strict):
-        if self.is_target:
+        if self.launchpad.FAILED:
+            pass
+        elif self.is_target:
             self.is_target = False
         elif strict:
             self.set(10)
-            self.launchpad.FAILED = True
+            if self.launchpad.LIVES:
+                self.launchpad.LIVES -= 1
+                print(self.launchpad.LIVES)
+                time.sleep(2)
+                if not self.is_target:
+                    self.set(0)
+            else:
+                self.launchpad.FAILED = True
         else:
+            self.is_target = False
             self.set(5)
             time.sleep(0.2)
             self.set(0)
@@ -94,7 +105,7 @@ async def main():
     lp = Launchpad(1)
     lp.clear()
     loop = asyncio.get_event_loop()
-    DUR = 3
+    DUR = 2
 
     def testing_callback(msg):
         if not msg.is_meta:
@@ -133,13 +144,12 @@ async def main():
         if time.time() > next_increase:
             next_increase = time.time() + 5
             DUR /= 1.5
-        await asyncio.sleep(random.random()*2*(DUR))
+        await asyncio.sleep(random.random()*2*(DUR)+0.05)
     lp.inp.callback = None
     
     for task in tasks:
         await task
     print("You failed :(")
-    time.sleep(1)
     print(f"Your score is {lp.SCORE}")
 
 asyncio.run(main())
