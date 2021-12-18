@@ -21,12 +21,18 @@ class Launchpad():
         self.IS_WORKING = False
         self.FAILED = False
         self.FAILED_COORDS = None
+        self.SCORE = 0
         self.squares = []
         for x in range(8):
             self.squares.append([])
             for y in range(8):
                 self.squares[x].append(
                         Square(self, (x, y)))
+    def clear(self):
+        for row in self.squares:
+            for square in row:
+                square.set(0)
+
 
 
 
@@ -45,6 +51,18 @@ class Square():
                 note=self.midi)
         self.launchpad.out.send(msg)
 
+    def press(self, strict):
+        if self.is_target:
+            self.is_target = False
+        elif strict:
+            self.set(10)
+            self.launchpad.FAILED = True
+        else:
+            self.set(5)
+            time.sleep(0.2)
+            self.set(0)
+            self.is_target = False
+
     def be_target(self):
         self.is_target = True
         dur = self.launchpad.dur
@@ -57,6 +75,7 @@ class Square():
                 break
             if not self.is_target:
                 self.set(0)
+                self.launchpad.SCORE += 1
                 break
             now = time.time()
             if now > (start_time + dur/3):
@@ -73,7 +92,9 @@ class Square():
 
 async def main():
     lp = Launchpad(1)
+    lp.clear()
     loop = asyncio.get_event_loop()
+    DUR = 3
 
     def testing_callback(msg):
         if not msg.is_meta:
@@ -91,27 +112,34 @@ async def main():
     task = loop.create_task(wait_for_is_working())
     await task
 
+    START_TIME = time.time()
+
     def callback(msg):
         if not msg.is_meta:
             if msg.type == 'note_on':
-                x, y = midi_to_coords(msg.note)
-                print(x, y)
-                lp.squares[x][y].is_target = False
+                if msg.velocity > 1:
+                    x, y = midi_to_coords(msg.note)
+                    lp.squares[x][y].press(strict=(START_TIME+5)<time.time())
 
     lp.inp.callback = callback
 
     tasks = []
-    game_start_time = time.time()
+    next_increase = time.time() + 10
     while not lp.FAILED:
         x, y = random.randint(0, 7), random.randint(0, 7)
         tasks.append(loop.run_in_executor(None,
             lp.squares[x][y].be_target
             ))
-        await asyncio.sleep(random.random()*2*(lp.dur/4))
+        if time.time() > next_increase:
+            next_increase = time.time() + 5
+            DUR /= 1.5
+        await asyncio.sleep(random.random()*2*(DUR))
     lp.inp.callback = None
     
     for task in tasks:
         await task
-    print("You missed one.")
+    print("You failed :(")
+    time.sleep(1)
+    print(f"Your score is {lp.SCORE}")
 
 asyncio.run(main())
