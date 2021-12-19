@@ -59,6 +59,11 @@ class Game():
 
     async def play(self):
 
+        self.launchpad.clear()
+        self.failed = False
+        self.score = 0
+        self.lives = 3
+        self.launchpad.health_bar.set()
         loop = asyncio.get_event_loop()
         dur = self.start_dur
         tasks = []
@@ -71,6 +76,8 @@ class Game():
                 if msg.type == 'note_on':
                     if msg.velocity > 1:
                         x, y = midi_to_coords(msg.note)
+                        if x > 7 or y > 7:
+                            return None
                         tasks.append(loop.run_in_executor(
                                 None,
                                 self.launchpad.squares[x][y].press,
@@ -100,11 +107,68 @@ class Game():
         print(f"You failed :(, {self.failed_reason}")
         print(f"Your score is {self.score}")
 
+        self.launchpad.health_bar.display_score(self.score)
         # wait a bit to let other lights finish their thing
-        task = loop.create_task(asyncio.sleep(2))
+        task = loop.create_task(asyncio.sleep(.5))
         await task
 
         return True
+
+    async def ask_play_again(self):
+        # Print message asking to play again
+        # and light up buttons
+        print("Play again?\n"
+              "  Green: yes\n"
+              "    Red: no")
+
+        self.waiting_for_input = True
+        async def wait_for_input():
+            while self.waiting_for_input:
+                await asyncio.sleep(0.05)
+            return None
+        self.play_again = None
+        def _callback(msg):
+            if not msg.is_meta:
+                if msg.type == 'note_on':
+                    if msg.note == 8:
+                        self.play_again = False
+                        self.waiting_for_input = False
+                    if msg.note == 24:
+                        self.play_again = True
+                        self.waiting_for_input = False
+
+
+        red_on = mido.Message('note_on',
+                note=8, velocity=10)
+        green_on = mido.Message('note_on',
+                note=24, velocity=60)
+
+        self.launchpad.inp.callback = _callback
+        for msg in [red_on, green_on]:
+            self.launchpad.out.send(msg)
+
+        play_again_task = asyncio.get_event_loop().create_task(
+                wait_for_input())
+        await play_again_task
+
+        # make buttons flash then turn off
+        red_off = mido.Message('note_on',
+                note=8, velocity=0)
+        green_off = mido.Message('note_on',
+                note=24, velocity=0)
+
+        self.launchpad.out.send(red_off)
+        if self.play_again:
+            for flash in range(3):
+                self.launchpad.out.send(green_off)
+                time.sleep(0.1)
+                self.launchpad.out.send(green_on)
+                time.sleep(0.1)
+        
+        self.launchpad.out.send(green_off)
+
+        return self.play_again
+
 
 
 
@@ -127,17 +191,13 @@ class Launchpad():
         for row in self.squares:
             for square in row:
                 square.set(0)
+        self.health_bar.set(0)
 
 
 class HealthBar():
     def __init__(self, launchpad):
         self.launchpad = launchpad
-        lives = launchpad.game.lives
-
-        for life in range(lives):
-            control = 104 + life
-            msg = mido.Message('control_change', value=10, control=control)
-            self.launchpad.out.send(msg)
+        self.set()
 
     def clear(self):
         for v in range(8):
@@ -150,6 +210,35 @@ class HealthBar():
                 control=103 + self.launchpad.game.lives)
         self.launchpad.out.send(msg)
         self.launchpad.game.lives -= 1
+
+    def set(self, lives=None):
+        if lives is None:
+            lives = self.launchpad.game.lives
+
+        for sq in range(7):
+            control = 104 + sq
+            if sq >= lives:
+                value = 0
+            else:
+                value = 10
+            msg = mido.Message('control_change', value=value, control=control)
+            self.launchpad.out.send(msg)
+
+    def display_score(self, score):
+        hundreds = score // 100
+        remaining = score % 100
+        value = 127
+        for sq in range(7):
+            control = 104 + sq
+            if sq == hundreds:
+                value = 29 * int(remaining > 50)
+            if sq > hundreds:
+                value = 0
+            msg = mido.Message('control_change',
+                    value=value,
+                    control=control)
+            self.launchpad.out.send(msg)
+
 
 class Square():
     def __init__(self, launchpad, coords):
