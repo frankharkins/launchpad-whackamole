@@ -20,7 +20,7 @@ class Launchpad():
         self.dur = 3  # time to react
         self.IS_WORKING = False
         self.FAILED = False
-        self.FAILED_COORDS = None
+        self.FAILED_REASON = None
         self.LIVES = 2
         self.SCORE = 0
         self.health_bar = HealthBar(self)
@@ -83,8 +83,12 @@ class Square():
                 self.launchpad.health_bar.decrement()
                 time.sleep(2)
                 if not self.is_target:
+                    self.set(5)
+                    time.sleep(1)
+                if not self.is_target:
                     self.set(0)
             else:
+                self.launchpad.FAILED_REASON = "pressed wrong buttons too many times."
                 self.launchpad.FAILED = True
         else:
             self.is_target = False
@@ -97,7 +101,7 @@ class Square():
         self.is_target = True
         dur = self.launchpad.dur
         start_time = time.time()
-        colours = [100, 60, 127, 110, None]
+        colours = [100, 60, 110, 127, None]
         self.set(colours.pop(0))
         while True:
             if self.launchpad.FAILED:
@@ -106,6 +110,7 @@ class Square():
             if not self.is_target:
                 self.set(0)
                 self.launchpad.SCORE += 1
+                print(f"Score: {self.launchpad.SCORE}", end="\r")
                 break
             now = time.time()
             if now > (start_time + dur/3):
@@ -115,7 +120,7 @@ class Square():
                     self.set(colour)
                 else:
                     self.set(127)
-                    self.launchpad.FAILED_COORDS = self.coords
+                    self.launchpad.FAILED_REASON = "you missed one."
                     self.launchpad.FAILED = True
                     self.set(127)
                     break
@@ -126,36 +131,48 @@ async def main():
     lp = Launchpad(1)
     lp.clear()
     loop = asyncio.get_event_loop()
-    DUR = 2
+    DUR = 1.6
 
     def testing_callback(msg):
         if not msg.is_meta:
-            if msg.type == 'note_on':
-                lp.IS_WORKING = True
+            lp.IS_WORKING = True
 
     lp.inp.callback = testing_callback
     print("Press any button to start...")
+    menu_btn_on = mido.Message('control_change',
+                                control=111,
+                                value=127)
+    lp.out.send(menu_btn_on)
     async def wait_for_is_working():
         while not lp.IS_WORKING:
             time.sleep(0.1)
-        print("Working")
+        print("Detected button press, starting!")
+        menu_btn_off = mido.Message('control_change',
+                control=111,
+                value=0)
+        lp.out.send(menu_btn_off)
         return None
 
     task = loop.create_task(wait_for_is_working())
     await task
 
     START_TIME = time.time()
+    tasks = []
 
     def callback(msg):
         if not msg.is_meta:
             if msg.type == 'note_on':
                 if msg.velocity > 1:
                     x, y = midi_to_coords(msg.note)
-                    lp.squares[x][y].press(strict=(START_TIME+5)<time.time())
+                    tasks.append(loop.run_in_executor(
+                            None,
+                            lp.squares[x][y].press,
+                            (START_TIME+5)<time.time()
+                            ))
+
 
     lp.inp.callback = callback
 
-    tasks = []
     next_increase = time.time() + 10
     while not lp.FAILED:
         x, y = random.randint(0, 7), random.randint(0, 7)
@@ -164,13 +181,16 @@ async def main():
             ))
         if time.time() > next_increase:
             next_increase = time.time() + 5
-            DUR /= 1.5
-        await asyncio.sleep((random.random()*2*DUR)+0.1)
+            DUR /= 1.3
+        await asyncio.sleep((random.random()*2*DUR)+0.15)
     lp.inp.callback = None
     
     for task in tasks:
         await task
-    print("You failed :(")
+    print(f"You failed :(, {lp.FAILED_REASON}")
     print(f"Your score is {lp.SCORE}")
+
+    task = loop.create_task(asyncio.sleep(2))
+    await task
 
 asyncio.run(main())
