@@ -23,6 +23,7 @@ class Launchpad():
         self.FAILED_COORDS = None
         self.LIVES = 2
         self.SCORE = 0
+        self.health_bar = HealthBar(self)
         self.squares = []
         for x in range(8):
             self.squares.append([])
@@ -35,7 +36,26 @@ class Launchpad():
                 square.set(0)
 
 
+class HealthBar():
+    def __init__(self, launchpad):
+        self.launchpad = launchpad
+        self.LIVES = 3
 
+        for life in range(self.LIVES):
+            control = 104 + life
+            msg = mido.Message('control_change', value=10, control=control)
+            self.launchpad.out.send(msg)
+
+    def clear(self):
+        for v in range(8):
+            control = 104 + v
+            msg = mido.Message('control_change', value=0, control=control)
+            self.launchpad.out.send(msg)
+
+    def decrement(self):
+        msg = mido.Message('control_change', value=0, control=103 + self.LIVES)
+        self.launchpad.out.send(msg)
+        self.LIVES -= 1
 
 class Square():
     def __init__(self, launchpad, coords):
@@ -59,9 +79,8 @@ class Square():
             self.is_target = False
         elif strict:
             self.set(10)
-            if self.launchpad.LIVES:
-                self.launchpad.LIVES -= 1
-                print(self.launchpad.LIVES)
+            if self.launchpad.health_bar.LIVES:
+                self.launchpad.health_bar.decrement()
                 time.sleep(2)
                 if not self.is_target:
                     self.set(0)
@@ -100,6 +119,8 @@ class Square():
                     self.launchpad.FAILED = True
                     self.set(127)
                     break
+            time.sleep(0.1)
+
 
 async def main():
     lp = Launchpad(1)
@@ -144,7 +165,7 @@ async def main():
         if time.time() > next_increase:
             next_increase = time.time() + 5
             DUR /= 1.5
-        await asyncio.sleep(random.random()*2*(DUR)+0.05)
+        await asyncio.sleep((random.random()*2*DUR)+0.1)
     lp.inp.callback = None
     
     for task in tasks:
