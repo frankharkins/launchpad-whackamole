@@ -13,7 +13,7 @@ part of ten years.
 In a terminal, navigate to this folder and run:
 
 ```
-python3 game.py
+python3 src/game.py
 ```
 
 You will be prompted to identify which MIDI device is your launchpad. Enter
