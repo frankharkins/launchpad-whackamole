@@ -6,12 +6,20 @@ from tools import midi_to_coords, coords_to_midi
 
 class Game():
     def __init__(self):
+        # Time user has to press a button
         self.react_time = 3
+        # Starting approx average time between new buttons appearing
         self.start_dur = 1.6
+        # Rate at which game will decrease time between new buttons
+        # appearing
         self.dur_ramp = 1.3
+        # Score (total number of buttons pressed)
         self.score = 0
+        # Number of incorrect presses allowed
         self.lives = 3
+        # Set to True if the game ends
         self.failed = False
+        # To inform the user about why they failed
         self.failed_reason = None
 
     async def setup_launchpad(self):
@@ -19,11 +27,27 @@ class Game():
         self.launchpad = Launchpad(self)
         self.launchpad.clear()
 
-        # Want to check input from the launchpad is working
-        # (sometimes need to press 'menu' for messages to
-        # come through.
+        # Show available devices and get user to pick one
+        available_devices = mido.get_output_names()
+        print("Found these MIDI devices:")
+        for num, device in enumerate(available_devices):
+            print(f"{num}:  {device}")
+
+        device_name = None
+        while device_name is None:
+            try:
+                num = input("Enter the device number of your launchpad: ")
+                device_name = available_devices[int(num)]
+            except (ValueError, IndexError) as e:
+                print(f"Please enter a number between {num} and "
+                      f"{len(available_devices)}")
+
+        # We want to check input from the launchpad is working
+        # (sometimes need to press 'mixer' for messages to
+        # come through).
 
         def _testing_callback(msg):
+            """Callback function to be run on launchpad button press"""
             if not msg.is_meta:
                 if msg.type == 'control_change':
                     if msg.control == 111:
@@ -31,34 +55,35 @@ class Game():
 
         self.launchpad.inp.callback = _testing_callback
 
-        # Display message and light up menu button
-        print("Press 'menu' to start...", end="")
-        menu_btn_on = mido.Message('control_change',
+        # Display message and light up mixer button
+        print("Press 'mixer' to start...", end="", flush=True)
+
+        mixer_btn_on = mido.Message('control_change',
                                     control=111,
                                     value=127)
-        self.launchpad.out.send(menu_btn_on)
+        self.launchpad.out.send(mixer_btn_on)
 
-        # Wait for menu button press
+        # Wait for mixer button press
         async def wait_for_is_working():
             while not self.launchpad.is_working:
                 time.sleep(0.1)
-            print(" detected menu button press.")
+            print(" detected mixer button press.")
             return None
-        task = loop.create_task(wait_for_is_working())
-        await task
+        wait_for_press = loop.create_task(wait_for_is_working())
+        await wait_for_press
 
-        # Turn off menu button light and turn off callback
-        menu_btn_off = mido.Message('control_change',
+        # Turn off mixer button light and turn off callback
+        mixer_btn_off = mido.Message('control_change',
                             control=111,
                             value=0)
-        self.launchpad.out.send(menu_btn_off)
+        self.launchpad.out.send(mixer_btn_off)
         self.launchpad.out.callback = None
 
         return True
-            
+
 
     async def play(self):
-
+        """Start the whack-a-mole game"""
         self.launchpad.clear()
         self.failed = False
         self.score = 0
@@ -72,6 +97,7 @@ class Game():
         # First, set up launchpad callback
 
         def _callback(msg):
+            """Callback function to be run on launchpad button press"""
             if not msg.is_meta:
                 if msg.type == 'note_on':
                     if msg.velocity > 1:

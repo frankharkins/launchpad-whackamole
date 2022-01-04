@@ -34,8 +34,10 @@ The goal is to press as many lit-up buttons as possible
 
 ![image showing some lit-up squares](images/game.png)
 
-On ending the game, you can choose to play again by pressing the 'pan'
-button, or to exit the game by pressing the 'vol' button.
+On ending the game, the game will show your score in the terminal, and light
+up the top row of circular buttons according to your score. You can choose
+to play again by pressing the 'pan' button, or to exit the game by pressing
+the 'vol' button (the circular, topmost button on the rightmost column).
 
 ![image showing the two play-again option buttons](images/play_again.png)
 
