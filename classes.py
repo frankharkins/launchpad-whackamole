@@ -39,8 +39,8 @@ class Game():
                 num = input("Enter the device number of your launchpad: ")
                 device_name = available_devices[int(num)]
             except (ValueError, IndexError) as e:
-                print(f"Please enter a number between {num} and "
-                      f"{len(available_devices)}")
+                print(f"Please enter a number between 0 and "
+                      f"{len(available_devices)-1}")
 
         # We want to check input from the launchpad is working
         # (sometimes need to press 'mixer' for messages to
@@ -56,7 +56,7 @@ class Game():
         self.launchpad.inp.callback = _testing_callback
 
         # Display message and light up mixer button
-        print("Press 'mixer' to start...", end="", flush=True)
+        print("Press 'mixer' button on your launchpad to start...", end="", flush=True)
 
         mixer_btn_on = mido.Message('control_change',
                                     control=111,
