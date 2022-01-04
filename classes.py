@@ -169,6 +169,9 @@ class Game():
 
         return self.play_again
 
+    async def end(self):
+        self.launchpad.clear()
+
 
 
 
